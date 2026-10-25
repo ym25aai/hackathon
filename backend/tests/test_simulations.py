@@ -7,7 +7,7 @@ from switch2.modules.simulations.router import run_simulation
 
 def test_mode_catalog_has_four_unique_modes() -> None:
     ids = [item.id for item in MODES]
-    assert ids == ["sandbox", "rules", "probability", "interaction"]
+    assert ids == ["sandbox", "interaction"]
     assert len(ids) == len(set(ids))
 
 
@@ -19,18 +19,18 @@ def test_category_catalog_has_eight_domain_packs() -> None:
 
 def test_universal_scenario_schema_accepts_shared_shape() -> None:
     scenario = ScenarioDefinition(
-        simulation_mode="rules",
+        simulation_mode="interaction",
         primary_category="career",
         scenario={"id": "team_conflict", "title": "Team Conflict"},
         initial_state={"deadline_hours": 24},
     )
-    assert scenario.simulation_mode == "rules"
+    assert scenario.simulation_mode == "interaction"
     assert scenario.primary_category == "career"
 
 
 def test_simulation_run_is_deterministic_and_returns_next_actions() -> None:
     scenario = ScenarioDefinition(
-        simulation_mode="rules",
+        simulation_mode="interaction",
         primary_category="career",
         scenario={"id": "team_conflict", "title": "Team Conflict"},
         initial_state={"team_trust": 45, "deadline_pressure": 60},

@@ -45,7 +45,7 @@ def run_simulation(payload: SimulationRunRequest) -> SimulationRunResponse:
     digest = hashlib.sha256(f"{payload.seed}:{payload.scenario.primary_category}:{payload.action}".encode()).digest()
     volatility = (digest[0] % 11) - 5
     action_index = available_actions.index(payload.action)
-    mode_modifier = {"sandbox": 4, "rules": 1, "probability": -1, "interaction": 2}[payload.scenario.simulation_mode]
+    mode_modifier = {"sandbox": 4, "interaction": 2}[payload.scenario.simulation_mode]
     initial = {
         name: max(0, min(100, int(payload.scenario.initial_state.get(name, 50))))
         for name in pack.state_variables
@@ -54,8 +54,6 @@ def run_simulation(payload: SimulationRunRequest) -> SimulationRunResponse:
     turns: list[SimulationTurn] = []
     for step in range(1, 4):
         delta = 5 + ((volatility + action_index + step + mode_modifier) % 7)
-        if payload.scenario.simulation_mode == "probability" and step == 3:
-            delta -= 4
         for name in state:
             state[name] = max(0, min(100, state[name] + delta - (step - 1)))
         outcome = "The choice creates useful momentum." if delta >= 7 else "The choice helps, but requires follow-through."

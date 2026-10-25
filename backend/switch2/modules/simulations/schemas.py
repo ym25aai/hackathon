@@ -3,7 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-SimulationMode = Literal["sandbox", "rules", "probability", "interaction"]
+SimulationMode = Literal["sandbox", "interaction"]
 SimulationCategory = Literal["self", "education", "career", "relationships", "finance", "ethics", "health", "crisis"]
 
 
