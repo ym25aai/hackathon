@@ -21,7 +21,7 @@ const copy = (language: string) => ({
   context: language === "繁體中文" ? "目前情況" : language === "简体中文" ? "当前情况" : "Current context",
   action: language === "繁體中文" ? "選擇第一步" : language === "简体中文" ? "选择第一步" : "Choose a first move",
   question: language === "繁體中文" ? "提出你的問題" : language === "简体中文" ? "提出你的问题" : "Ask your question",
-  submit: language === "繁體中文" ? "提交並分析" : language === "简体中文" ? "提交并分析" : "Submit and analyze",
+  submit: language === "繁體中文" ? "開始模擬" : language === "简体中文" ? "开始模拟" : "Start simulation",
   loading: language === "繁體中文" ? "分析中…" : language === "简体中文" ? "分析中…" : "Analyzing…",
   validate: language === "繁體中文" ? "檢查並繼續" : language === "简体中文" ? "检查并继续" : "Validate and continue",
   back: language === "繁體中文" || language === "简体中文" ? "返回" : "Back",
