@@ -134,6 +134,10 @@ class InteractionInviteResponse(BaseModel):
     status: str
 
 
+class InteractionInviteDecision(BaseModel):
+    accepted: bool
+
+
 class InteractionSessionCreate(BaseModel):
     category: str = Field(min_length=1, max_length=40)
     scenario_title: str = Field(min_length=1, max_length=200)

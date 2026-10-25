@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, InteractionChatResponse, InteractionInvite, InteractionInviteCreate, InteractionInviteResponse, InteractionMessage, InteractionMessageCreate, InteractionSession, InteractionSessionCreate, PinPayload, PreferenceState, PreferenceStateWrite, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, UnlockResponse
+from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, InteractionChatResponse, InteractionInvite, InteractionInviteCreate, InteractionInviteDecision, InteractionInviteResponse, InteractionMessage, InteractionMessageCreate, InteractionSession, InteractionSessionCreate, PinPayload, PreferenceState, PreferenceStateWrite, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, UnlockResponse
 from .service import create_interaction_invite, create_interaction_session, create_profile, delete_profile, generate_ai_questions, generate_ai_report, generate_interaction_chat, generate_sandbox_analysis, get_ai_config, get_preferences, list_interaction_invites, list_interaction_messages, list_interaction_sessions, list_profiles, list_sent_interaction_invites, polish_answer, respond_interaction_invite, save_ai_config, save_preferences, set_profile_pin, unlock_profile
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
@@ -71,7 +71,7 @@ def get_sent_interaction_invites(profile_id: int) -> list[InteractionInvite]:
 
 
 @router.post("/{profile_id}/interaction-invites/{invite_id}/respond", response_model=InteractionInviteResponse)
-def post_interaction_invite_response(profile_id: int, invite_id: int, payload: InteractionInviteResponse) -> InteractionInviteResponse:
+def post_interaction_invite_response(profile_id: int, invite_id: int, payload: InteractionInviteDecision) -> InteractionInviteResponse:
     return respond_interaction_invite(profile_id, invite_id, payload.accepted)
 
 
