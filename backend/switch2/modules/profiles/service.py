@@ -3,6 +3,7 @@ import hmac
 import json
 import secrets
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -10,7 +11,7 @@ from urllib.request import Request, urlopen
 from fastapi import HTTPException
 from cryptography.fernet import Fernet, InvalidToken
 
-from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, InteractionInvite, InteractionInviteCreate, InteractionInviteResponse, PinPayload, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, SandboxDecision
+from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, InteractionChatResponse, InteractionInvite, InteractionInviteCreate, InteractionInviteResponse, InteractionMessage, InteractionMessageCreate, InteractionSession, InteractionSessionCreate, PinPayload, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, SandboxDecision
 from ...config import settings
 from ...database import connection
 from ...profile_store import initialize_profile_database, profile_connection, profile_database_path, read_preference, write_preference
@@ -446,3 +447,136 @@ def respond_interaction_invite(profile_id: int, invite_id: int, accepted: bool) 
         status = "accepted" if accepted else "declined"
         database.execute("UPDATE interaction_invites SET status = ?, responded_at = CURRENT_TIMESTAMP WHERE id = ?", (status, invite_id))
     return InteractionInviteResponse(accepted=accepted, status=status)
+
+
+def _interaction_session(row) -> InteractionSession:
+    data = dict(row)
+    participant_ids = json.loads(data.pop("participant_profile_ids") or "[]")
+    names = []
+    with connection() as database:
+        for participant_id in participant_ids:
+            participant = database.execute("SELECT nickname FROM profiles WHERE id = ?", (participant_id,)).fetchone()
+            if participant:
+                names.append(participant["nickname"])
+    data["participant_profile_ids"] = participant_ids
+    data["participant_nicknames"] = names
+    return InteractionSession(**data)
+
+
+def _session_access(database, profile_id: int, session_id: str):
+    row = database.execute("SELECT s.id, s.sender_profile_id, p.nickname AS sender_nickname, s.category, s.scenario_title, s.context, s.participant_profile_ids, s.status, s.created_at FROM interaction_sessions s JOIN profiles p ON p.id = s.sender_profile_id WHERE s.id = ?", (session_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Interaction session not found")
+    participant_ids = json.loads(row["participant_profile_ids"] or "[]")
+    if row["sender_profile_id"] != profile_id and profile_id not in participant_ids:
+        raise HTTPException(status_code=403, detail="This profile is not authorized for the session")
+    return row, participant_ids
+
+
+def create_interaction_session(profile_id: int, payload: InteractionSessionCreate) -> InteractionSession:
+    participant_ids = list(dict.fromkeys(payload.participant_profile_ids))
+    if not participant_ids:
+        raise HTTPException(status_code=400, detail="Authorize at least one participant first")
+    with connection() as database:
+        sender = database.execute("SELECT id FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+        if sender is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        for participant_id in participant_ids:
+            accepted = database.execute("SELECT 1 FROM interaction_invites WHERE sender_profile_id = ? AND recipient_profile_id = ? AND status = 'accepted' ORDER BY id DESC LIMIT 1", (profile_id, participant_id)).fetchone()
+            if accepted is None:
+                raise HTTPException(status_code=403, detail="Every participant must authorize the session")
+        session_id = uuid.uuid4().hex
+        database.execute("INSERT INTO interaction_sessions (id, sender_profile_id, category, scenario_title, context, participant_profile_ids) VALUES (?, ?, ?, ?, ?, ?)", (session_id, profile_id, payload.category, payload.scenario_title, payload.context, json.dumps(participant_ids)))
+        row = database.execute("SELECT s.id, s.sender_profile_id, p.nickname AS sender_nickname, s.category, s.scenario_title, s.context, s.participant_profile_ids, s.status, s.created_at FROM interaction_sessions s JOIN profiles p ON p.id = s.sender_profile_id WHERE s.id = ?", (session_id,)).fetchone()
+    return _interaction_session(row)
+
+
+def list_interaction_sessions(profile_id: int) -> list[InteractionSession]:
+    with connection() as database:
+        rows = database.execute("SELECT s.id, s.sender_profile_id, p.nickname AS sender_nickname, s.category, s.scenario_title, s.context, s.participant_profile_ids, s.status, s.created_at FROM interaction_sessions s JOIN profiles p ON p.id = s.sender_profile_id ORDER BY s.created_at DESC LIMIT 20").fetchall()
+    sessions = []
+    for row in rows:
+        ids = json.loads(row["participant_profile_ids"] or "[]")
+        if row["sender_profile_id"] == profile_id or profile_id in ids:
+            sessions.append(_interaction_session(row))
+    return sessions
+
+
+def list_interaction_messages(profile_id: int, session_id: str) -> list[InteractionMessage]:
+    with connection() as database:
+        _session_access(database, profile_id, session_id)
+        rows = database.execute("SELECT id, session_id, speaker_profile_id, speaker_name, speaker_type, content, created_at FROM interaction_messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
+    return [InteractionMessage(**dict(row)) for row in rows]
+
+
+def _interaction_ai_request(provider: str, model: str, token: str, prompt: str) -> tuple[str, str]:
+    if provider == "deepseek":
+        selected_model = "deepseek-v4-flash" if model in {"", "DeepSeek", "Auto (DeepSeek)", "deepseek-flash"} else model
+        body = json.dumps({"model": selected_model, "messages": [{"role": "system", "content": "You simulate authorized people carefully. Return only valid JSON."}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}, "stream": False}).encode("utf-8")
+        request = Request("https://api.deepseek.com/chat/completions", data=body, headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"}, method="POST")
+        with urlopen(request, timeout=35) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"], selected_model
+    if provider == "gemini":
+        selected_model = _gemini_model(token, model)
+        body = json.dumps({"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}).encode("utf-8")
+        request = Request(f"https://generativelanguage.googleapis.com/v1beta/models/{selected_model}:generateContent?key={token}", data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(request, timeout=35) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        content = "".join(part.get("text", "") for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []))
+        return content, selected_model
+    raise HTTPException(status_code=501, detail=f"Provider '{provider}' is not implemented yet")
+
+
+def generate_interaction_chat(profile_id: int, session_id: str, payload: InteractionMessageCreate | None) -> InteractionChatResponse | list[InteractionMessage]:
+    with connection() as database:
+        session, participant_ids = _session_access(database, profile_id, session_id)
+        if payload is None:
+            rows = database.execute("SELECT id, session_id, speaker_profile_id, speaker_name, speaker_type, content, created_at FROM interaction_messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
+            return [InteractionMessage(**dict(row)) for row in rows]
+        if payload.mode == "human" and profile_id not in participant_ids:
+            raise HTTPException(status_code=403, detail="Only an authorized participant can take over")
+        speaker = database.execute("SELECT nickname FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+        speaker_name = speaker["nickname"] if speaker else "Participant"
+        speaker_type = "human" if payload.mode == "human" else "user"
+        database.execute("INSERT INTO interaction_messages (session_id, speaker_profile_id, speaker_name, speaker_type, content) VALUES (?, ?, ?, ?, ?)", (session_id, profile_id, speaker_name, speaker_type, payload.content.strip()))
+        if payload.mode == "human":
+            rows = database.execute("SELECT id, session_id, speaker_profile_id, speaker_name, speaker_type, content, created_at FROM interaction_messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
+            return InteractionChatResponse(messages=[InteractionMessage(**dict(row)) for row in rows], model="human takeover")
+
+    provider, requested_model, token = _load_ai_secret(profile_id)
+    personas = []
+    for participant_id in participant_ids:
+        preferences = get_preferences(participant_id)
+        with connection() as database:
+            person = database.execute("SELECT nickname FROM profiles WHERE id = ?", (participant_id,)).fetchone()
+        personas.append({"profile_id": participant_id, "nickname": person["nickname"] if person else "Participant", "self_reported_preferences": preferences["answers"]})
+    with connection() as database:
+        history = database.execute("SELECT speaker_name, speaker_type, content FROM interaction_messages WHERE session_id = ? ORDER BY id ASC LIMIT 30", (session_id,)).fetchall()
+    prompt = "Return only JSON with a `replies` array. Write exactly one reply for each authorized persona. Each item must contain profile_id and content. Do not claim to be the real person. Use only their self-reported preferences as style context. Session: " + json.dumps({"category": session["category"], "scenario_title": session["scenario_title"], "context": session["context"], "personas": personas, "conversation": [dict(item) for item in history]}, ensure_ascii=False)
+    try:
+        content, model = _interaction_ai_request(provider, requested_model, token, prompt)
+        parsed = json.loads(content.removeprefix("```json").removesuffix("```").strip())
+        replies = parsed.get("replies") if isinstance(parsed, dict) else None
+        if not isinstance(replies, list):
+            raise ValueError("AI returned an invalid interaction response")
+    except HTTPException:
+        raise
+    except HTTPError as exc:
+        raise HTTPException(status_code=502, detail=exc.read().decode("utf-8", errors="replace")) from exc
+    except (URLError, TimeoutError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail=f"Interaction AI generation failed: {exc}") from exc
+
+    with connection() as database:
+        for reply in replies:
+            try:
+                persona_id = int(reply["profile_id"])
+                text = str(reply["content"]).strip()
+            except (KeyError, TypeError, ValueError):
+                continue
+            if persona_id not in participant_ids or not text:
+                continue
+            person = database.execute("SELECT nickname FROM profiles WHERE id = ?", (persona_id,)).fetchone()
+            database.execute("INSERT INTO interaction_messages (session_id, speaker_profile_id, speaker_name, speaker_type, content) VALUES (?, ?, ?, ?, ?)", (session_id, persona_id, person["nickname"] if person else "AI Persona", "ai-persona", text))
+        rows = database.execute("SELECT id, session_id, speaker_profile_id, speaker_name, speaker_type, content, created_at FROM interaction_messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
+    return InteractionChatResponse(messages=[InteractionMessage(**dict(row)) for row in rows], model=model)

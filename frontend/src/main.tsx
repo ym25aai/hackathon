@@ -21,7 +21,7 @@ import "./flow-industrial.css";
 import { applyLocaleToDocument, localeText } from "./i18n";
 import { StructuredPreferenceFlow } from "./structured-preference";
 import { SettingsPanelV2 } from "./settings-panel-v2";
-import { EngineLab } from "./engine";
+import { EngineLab } from "./engine-clean";
 
 type Profile = { id: number; nickname: string; timezone: string; currency: string; pin_configured: boolean };
 type Answers = Record<string, string>;

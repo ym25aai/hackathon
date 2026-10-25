@@ -31,6 +31,31 @@ def initialize_database() -> None:
                 FOREIGN KEY(recipient_profile_id) REFERENCES profiles(id) ON DELETE CASCADE
             )
         """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS interaction_sessions (
+                id TEXT PRIMARY KEY,
+                sender_profile_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                scenario_title TEXT NOT NULL,
+                context TEXT NOT NULL DEFAULT '',
+                participant_profile_ids TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(sender_profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS interaction_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                speaker_profile_id INTEGER,
+                speaker_name TEXT NOT NULL,
+                speaker_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(session_id) REFERENCES interaction_sessions(id) ON DELETE CASCADE
+            )
+        """)
         columns = {row[1] for row in connection.execute("PRAGMA table_info(profiles)").fetchall()}
         if "pin_salt" not in columns:
             connection.execute("ALTER TABLE profiles ADD COLUMN pin_salt TEXT")

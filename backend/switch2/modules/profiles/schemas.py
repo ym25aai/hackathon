@@ -132,3 +132,43 @@ class InteractionInvite(BaseModel):
 class InteractionInviteResponse(BaseModel):
     accepted: bool
     status: str
+
+
+class InteractionSessionCreate(BaseModel):
+    category: str = Field(min_length=1, max_length=40)
+    scenario_title: str = Field(min_length=1, max_length=200)
+    context: str = Field(default="", max_length=5000)
+    participant_profile_ids: list[int] = Field(default_factory=list, max_length=10)
+
+
+class InteractionSession(BaseModel):
+    id: str
+    sender_profile_id: int
+    sender_nickname: str
+    category: str
+    scenario_title: str
+    context: str
+    participant_profile_ids: list[int]
+    participant_nicknames: list[str]
+    status: str
+    created_at: str
+
+
+class InteractionMessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    mode: str = Field(default="ai", pattern="^(ai|human)$")
+
+
+class InteractionMessage(BaseModel):
+    id: int
+    session_id: str
+    speaker_profile_id: int | None = None
+    speaker_name: str
+    speaker_type: str
+    content: str
+    created_at: str
+
+
+class InteractionChatResponse(BaseModel):
+    messages: list[InteractionMessage]
+    model: str

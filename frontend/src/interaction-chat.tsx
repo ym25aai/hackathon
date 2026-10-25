@@ -1,0 +1,16 @@
+import { useEffect, useState } from "react";
+import "./interaction-chat.css";
+
+type Message = { id: number; speaker_profile_id: number | null; speaker_name: string; speaker_type: string; content: string; created_at: string };
+const api = (path: string, init?: RequestInit) => fetch(`/api${path}`, init);
+
+export function InteractionChat({ profileId, sessionId, participantNames, takeover = false }: { profileId: number; sessionId: string; participantNames: string[]; takeover?: boolean }) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [model, setModel] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => { let alive = true; const load = () => api(`/profiles/${profileId}/interaction-sessions/${sessionId}/messages`).then((response) => response.ok ? response.json() : []).then((items: Message[]) => { if (alive) setMessages(items); }).catch(() => undefined); void load(); const timer = window.setInterval(load, 3000); return () => { alive = false; window.clearInterval(timer); }; }, [profileId, sessionId]);
+  const send = async () => { if (!draft.trim() || loading) return; setLoading(true); setError(""); try { const response = await api(`/profiles/${profileId}/interaction-sessions/${sessionId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: draft.trim(), mode: takeover ? "human" : "ai" }) }); const value = await response.json(); if (!response.ok) throw Error(value.detail || "The interaction message failed."); setMessages(value.messages || []); setModel(value.model || ""); setDraft(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "The interaction message failed."); } finally { setLoading(false); } };
+  return <div className="interaction-chat"><div className="interaction-chat-head"><div><h3>{takeover ? "Direct takeover" : "AI persona conversation"}</h3><p>{takeover ? "Your messages are sent as your own profile. You can take back control at any time." : "The AI responds as authorized personas using only their shared self-reported preferences."}</p></div><span>{participantNames.join(", ")}</span></div><div className="interaction-messages">{messages.length ? messages.map((message) => <article className={`interaction-message ${message.speaker_type}`} key={message.id}><div><strong>{message.speaker_name}</strong><small>{message.speaker_type === "ai-persona" ? "AI persona" : message.speaker_type === "human" ? "Direct takeover" : "You"}</small></div><p>{message.content}</p></article>) : <p className="engine-muted">Start a conversation with the authorized personas.</p>}</div><textarea rows={3} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={takeover ? "Write a message as yourself..." : "Ask the authorized personas a question..."} /><div className="interaction-chat-actions"><button className="primary-button" onClick={send} disabled={loading || !draft.trim()}>{loading ? "Sending..." : takeover ? "Send as me" : "Ask AI personas"}</button>{model && <span>Model: {model}</span>}</div>{error && <div className="engine-error">{error}</div>}</div>;
+}
