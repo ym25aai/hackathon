@@ -63,6 +63,32 @@ class AIReportResponse(BaseModel):
     model: str
 
 
+class SandboxAnalysisRequest(BaseModel):
+    mode: str = Field(default="sandbox", min_length=1, max_length=40)
+    category: str = Field(min_length=1, max_length=40)
+    question: str = Field(min_length=3, max_length=5000)
+    language: str = Field(default="English", max_length=40)
+
+
+class SandboxDecision(BaseModel):
+    id: str
+    title: str
+    description: str
+    tradeoffs: list[str] = Field(default_factory=list)
+    first_step: str
+    risk: str
+    fit_score: int = Field(ge=0, le=100)
+
+
+class SandboxAnalysisResponse(BaseModel):
+    cache_hit: bool = False
+    generated_at: str
+    expires_at: str
+    model: str
+    report_markdown: str
+    decisions: list[SandboxDecision]
+
+
 class PreferenceState(BaseModel):
     answers: dict[str, str] = Field(default_factory=dict)
     ai_questions: list[str] = Field(default_factory=list)

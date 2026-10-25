@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, PinPayload, PreferenceState, PreferenceStateWrite, Profile, ProfileCreate, UnlockResponse
-from .service import create_profile, delete_profile, generate_ai_questions, generate_ai_report, get_ai_config, get_preferences, list_profiles, polish_answer, save_ai_config, save_preferences, set_profile_pin, unlock_profile
+from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, PinPayload, PreferenceState, PreferenceStateWrite, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, UnlockResponse
+from .service import create_profile, delete_profile, generate_ai_questions, generate_ai_report, generate_sandbox_analysis, get_ai_config, get_preferences, list_profiles, polish_answer, save_ai_config, save_preferences, set_profile_pin, unlock_profile
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
 
@@ -48,6 +48,11 @@ def post_profile_ai_questions(profile_id: int, payload: AIQuestionsRequest) -> A
 @router.post("/{profile_id}/ai-report", response_model=AIReportResponse)
 def post_profile_ai_report(profile_id: int, payload: AIReportRequest) -> AIReportResponse:
     return generate_ai_report(profile_id, payload)
+
+
+@router.post("/{profile_id}/sandbox-analysis", response_model=SandboxAnalysisResponse)
+def post_sandbox_analysis(profile_id: int, payload: SandboxAnalysisRequest) -> SandboxAnalysisResponse:
+    return generate_sandbox_analysis(profile_id, payload)
 
 
 @router.post("/{profile_id}/ai-polish", response_model=AIPolishResponse)

@@ -3,13 +3,14 @@ import hmac
 import json
 import secrets
 import time
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import HTTPException
 from cryptography.fernet import Fernet, InvalidToken
 
-from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, PinPayload, Profile, ProfileCreate
+from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, PinPayload, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, SandboxDecision
 from ...config import settings
 from ...database import connection
 from ...profile_store import initialize_profile_database, profile_connection, profile_database_path, read_preference, write_preference
@@ -267,6 +268,102 @@ def generate_ai_report(profile_id: int, payload: AIReportRequest) -> AIReportRes
         raise HTTPException(status_code=502, detail=exc.read().decode("utf-8", errors="replace")) from exc
     except (URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+def _sandbox_fallback(category: str, question: str, answers: dict[str, str], language: str) -> dict:
+    """Keep Sandbox useful when an AI provider is temporarily unavailable."""
+    focus = answers.get("desired_change") or answers.get("focus") or "your stated priorities"
+    labels = ["Small experiment", "Structured comparison", "Protective pause"]
+    steps = [
+        "Run the smallest reversible version for seven days and record what changes.",
+        "Write down the top two criteria, compare the options, and choose the one with the clearest evidence.",
+        "Pause the irreversible part, confirm your constraints, and ask one trusted person to review the plan.",
+    ]
+    decisions = [{
+        "id": f"sandbox_{index + 1}", "title": labels[index],
+        "description": f"A {category} response to {question}",
+        "tradeoffs": [f"Balances the plan with {focus}", "Needs a short review after the first test"],
+        "first_step": steps[index], "risk": "medium" if index == 1 else "low", "fit_score": 78 - index * 7,
+    } for index in range(3)]
+    report = "\n".join([
+        "# Sandbox Decision Report", "", f"**Question:** {question}", f"**Category:** {category}", "",
+        "This report uses your self-reported Analysis preferences as decision context. It is exploratory, not professional advice.", "",
+        *[f"## {item['title']}\n\n{item['description']}\n\n- First step: {item['first_step']}\n- Risk: {item['risk']}\n- Fit: {item['fit_score']}/100" for item in decisions],
+    ])
+    return {"decisions": decisions, "report_markdown": report, "model": "fallback"}
+
+
+def _parse_sandbox_content(content: str, category: str, question: str, answers: dict[str, str], language: str) -> dict:
+    cleaned = content.strip().removeprefix("```json").removesuffix("```").strip()
+    parsed = json.loads(cleaned)
+    decisions = parsed.get("decisions") if isinstance(parsed, dict) else None
+    report = parsed.get("report_markdown") if isinstance(parsed, dict) else None
+    if not isinstance(decisions, list) or len(decisions) != 3 or not isinstance(report, str) or not report.strip():
+        raise ValueError("AI returned an invalid Sandbox decision format")
+    normalized = []
+    for index, item in enumerate(decisions[:3]):
+        if not isinstance(item, dict):
+            raise ValueError("AI returned an invalid Sandbox decision")
+        normalized.append({
+            "id": str(item.get("id") or f"sandbox_{index + 1}"),
+            "title": str(item.get("title") or f"Option {index + 1}"),
+            "description": str(item.get("description") or ""),
+            "tradeoffs": [str(value) for value in item.get("tradeoffs", [])][:4],
+            "first_step": str(item.get("first_step") or "Choose one small next step."),
+            "risk": str(item.get("risk") or "medium"),
+            "fit_score": max(0, min(100, int(item.get("fit_score", 50)))),
+        })
+    return {"decisions": normalized, "report_markdown": report.strip()}
+
+
+def generate_sandbox_analysis(profile_id: int, payload: SandboxAnalysisRequest) -> SandboxAnalysisResponse:
+    preferences = get_preferences(profile_id)
+    source = {"mode": payload.mode, "category": payload.category, "question": payload.question.strip(), "language": payload.language, "analysis": preferences}
+    fingerprint = hashlib.sha256(json.dumps(source, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc)
+    cached = read_preference(profile_id, "sandbox_analysis_cache", None)
+    if cached and cached.get("fingerprint") == fingerprint:
+        try:
+            expires = datetime.fromisoformat(cached["expires_at"])
+            if expires > now:
+                return SandboxAnalysisResponse(cache_hit=True, generated_at=cached["generated_at"], expires_at=cached["expires_at"], model=cached["model"], report_markdown=cached["report_markdown"], decisions=cached["decisions"])
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    try:
+        provider, requested_model, token = _load_ai_secret(profile_id)
+        prompt = "Return only valid JSON with exactly three objects in `decisions` and a `report_markdown` string. Each decision must contain id, title, description, tradeoffs (array of strings), first_step, risk, and fit_score (0-100). Compare meaningfully different, actionable, reversible options. Use the user's Analysis only as self-reported context. Do not diagnose or invent facts. Write in " + payload.language + ". Category: " + payload.category + ". Question: " + payload.question.strip() + ". Analysis context: " + json.dumps(preferences, ensure_ascii=False)
+        if provider == "deepseek":
+            model = "deepseek-v4-flash" if requested_model in {"", "DeepSeek", "Auto (DeepSeek)", "deepseek-flash"} else requested_model
+            body = json.dumps({"model": model, "messages": [{"role": "system", "content": "You are a careful decision-support analyst. Always return valid JSON."}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}, "stream": False}).encode("utf-8")
+            request = Request("https://api.deepseek.com/chat/completions", data=body, headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"}, method="POST")
+            with urlopen(request, timeout=40) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            parsed = _parse_sandbox_content(data["choices"][0]["message"]["content"], payload.category, payload.question, preferences["answers"], payload.language)
+            model_name = model
+        elif provider == "gemini":
+            model = _gemini_model(token, requested_model)
+            body = json.dumps({"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}).encode("utf-8")
+            request = Request(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={token}", data=body, headers={"Content-Type": "application/json"}, method="POST")
+            with urlopen(request, timeout=40) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            content = "".join(part.get("text", "") for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []))
+            parsed = _parse_sandbox_content(content, payload.category, payload.question, preferences["answers"], payload.language)
+            model_name = model
+        else:
+            raise HTTPException(status_code=501, detail=f"Provider '{provider}' is not implemented yet")
+    except HTTPException:
+        raise
+    except HTTPError as exc:
+        raise HTTPException(status_code=502, detail=exc.read().decode("utf-8", errors="replace")) from exc
+    except (URLError, TimeoutError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail=f"Sandbox AI generation failed: {exc}") from exc
+
+    generated_at = now.isoformat()
+    expires_at = (now + timedelta(days=1)).isoformat()
+    record = {"fingerprint": fingerprint, "generated_at": generated_at, "expires_at": expires_at, "model": model_name, **parsed}
+    write_preference(profile_id, "sandbox_analysis_cache", record)
+    return SandboxAnalysisResponse(cache_hit=False, generated_at=generated_at, expires_at=expires_at, model=model_name, report_markdown=parsed["report_markdown"], decisions=parsed["decisions"])
 
 
 def polish_answer(profile_id: int, payload: AIPolishRequest) -> AIPolishResponse:
