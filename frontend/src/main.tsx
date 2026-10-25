@@ -18,6 +18,8 @@ import "./layout-fixes.css";
 import "./vector-ui.css";
 import "./profile-modal.css";
 import "./flow-industrial.css";
+import "./global-interaction.css";
+import "./global-interaction-inbox";
 import { applyLocaleToDocument, localeText } from "./i18n";
 import { StructuredPreferenceFlow } from "./structured-preference";
 import { SettingsPanelV2 } from "./settings-panel-v2";
