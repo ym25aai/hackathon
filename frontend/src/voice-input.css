@@ -1,0 +1,27 @@
+.voice-input-button {
+  display: block;
+  margin: 6px 0 0 auto;
+  min-width: 38px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid #c8d2c8;
+  border-radius: 999px;
+  background: #f7faf5;
+  color: #5b765d;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.voice-input-button:hover,
+.voice-input-button.voice-input-listening {
+  border-color: #789b72;
+  background: #e4efd7;
+  color: #2e5636;
+}
+.voice-input-button.voice-input-listening {
+  animation: voice-input-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes voice-input-pulse {
+  from { box-shadow: 0 0 0 0 #8caf7c55; }
+  to { box-shadow: 0 0 0 6px #8caf7c00; }
+}
