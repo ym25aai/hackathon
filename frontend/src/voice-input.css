@@ -1,6 +1,12 @@
+.voice-input-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 30px;
+  margin-top: 6px;
+}
 .voice-input-button {
-  display: block;
-  margin: 6px 0 0 auto;
   min-width: 38px;
   min-height: 30px;
   padding: 4px 10px;
@@ -11,6 +17,34 @@
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
+}
+.voice-input-wave {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #edf5e8;
+}
+.voice-input-active .voice-input-wave {
+  display: inline-flex;
+}
+.voice-input-wave i {
+  display: block;
+  width: 3px;
+  height: 7px;
+  border-radius: 3px;
+  background: #6d9868;
+  animation: voice-input-wave 0.75s ease-in-out infinite alternate;
+}
+.voice-input-wave i:nth-child(2) { animation-delay: 0.12s; }
+.voice-input-wave i:nth-child(3) { animation-delay: 0.24s; }
+.voice-input-wave i:nth-child(4) { animation-delay: 0.36s; }
+.voice-input-wave i:nth-child(5) { animation-delay: 0.48s; }
+@keyframes voice-input-wave {
+  from { height: 5px; opacity: .45; }
+  to { height: 18px; opacity: 1; }
 }
 .voice-input-button:hover,
 .voice-input-button.voice-input-listening {

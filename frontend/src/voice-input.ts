@@ -28,18 +28,26 @@ function attachVoiceButton(field: HTMLTextAreaElement) {
   field.dataset.voiceReady = "true";
   const factory = recognitionFactory();
   if (!factory) return;
+  const controls = document.createElement("span");
+  controls.className = "voice-input-controls";
   const button = document.createElement("button");
   button.type = "button";
   button.className = "voice-input-button";
-  button.textContent = "🎙";
+  button.textContent = "MIC";
   button.title = "Speak instead of typing";
   button.setAttribute("aria-label", "Speak instead of typing");
+  const wave = document.createElement("span");
+  wave.className = "voice-input-wave";
+  wave.setAttribute("aria-hidden", "true");
+  wave.innerHTML = "<i></i><i></i><i></i><i></i><i></i>";
+  controls.append(button, wave);
   let recognition: SpeechRecognitionLike | null = null;
   let listening = false;
   const finish = () => {
     listening = false;
+    controls.classList.remove("voice-input-active");
     button.classList.remove("voice-input-listening");
-    button.textContent = "🎙";
+    button.textContent = "MIC";
     button.title = "Speak instead of typing";
   };
   button.onclick = () => {
@@ -62,12 +70,13 @@ function attachVoiceButton(field: HTMLTextAreaElement) {
     recognition.onend = finish;
     recognition.onerror = finish;
     listening = true;
+    controls.classList.add("voice-input-active");
     button.classList.add("voice-input-listening");
-    button.textContent = "■";
+    button.textContent = "STOP";
     button.title = "Stop listening";
     recognition.start();
   };
-  field.insertAdjacentElement("afterend", button);
+  field.insertAdjacentElement("afterend", controls);
 }
 
 function scan() {
