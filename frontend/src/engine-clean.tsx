@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./engine.css";
+import "./engine-category.css";
 import "./interaction-chat.css";
 import { InteractionChat } from "./interaction-chat";
 import { InteractionInbox } from "./interaction-inbox";

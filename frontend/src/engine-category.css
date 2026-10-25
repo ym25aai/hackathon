@@ -1,0 +1,9 @@
+.category-grid .engine-select-card {
+  font-size: 0;
+}
+.category-grid .engine-select-card strong {
+  font-size: 18px;
+}
+.category-grid .engine-select-card small {
+  font-size: 12px;
+}
