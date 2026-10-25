@@ -37,3 +37,27 @@ class ScenarioDefinition(BaseModel):
     actions: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
     evaluation: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulationRunRequest(BaseModel):
+    scenario: ScenarioDefinition
+    action: str = Field(min_length=1, max_length=120)
+    seed: int = Field(default=7, ge=0, le=2_147_483_647)
+
+
+class SimulationTurn(BaseModel):
+    step: int
+    action: str
+    outcome: str
+    state: dict[str, int]
+
+
+class SimulationRunResponse(BaseModel):
+    run_id: str
+    score: int
+    status: Literal["promising", "mixed", "high-risk"]
+    summary: str
+    state: dict[str, int]
+    metrics: dict[str, int]
+    next_actions: list[str]
+    log: list[SimulationTurn]
