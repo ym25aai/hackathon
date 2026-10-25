@@ -22,7 +22,6 @@ function draw(invites: Invite[]) {
 }
 
 async function refresh() {
-  if (document.querySelector(".engine-page")) { draw([]); return; }
   const response = await api("/profiles"); if (!response.ok) return;
   const profiles: Profile[] = await response.json(); const profileId = activeProfileId(profiles); currentProfileId = profileId;
   if (!profileId) { draw([]); return; }
