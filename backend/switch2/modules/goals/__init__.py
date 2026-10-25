@@ -1,0 +1,1 @@
+"""Goal lifecycle module."""

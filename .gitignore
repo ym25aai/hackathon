@@ -1,0 +1,32 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+backend/.switch2-token-key
+
+# Local databases and profile data
+data/
+*.sqlite3
+*.sqlite
+*.db
+
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/
+
+# Local tooling and editor files
+.vscode/
+.idea/
+*.log
+coverage/

@@ -1,0 +1,1 @@
+"""User-recorded activity module."""

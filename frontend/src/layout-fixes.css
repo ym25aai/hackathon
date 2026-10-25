@@ -1,0 +1,2 @@
+.structured-preferences .ppt-next-arrow{display:none!important}
+.sidebar.sidebar-collapsed{width:0!important;min-width:0!important;padding:0!important;border-right:0!important;overflow:visible!important}.sidebar.sidebar-collapsed>*:not(.sidebar-toggle){display:none!important}.sidebar.sidebar-collapsed .sidebar-toggle{display:grid!important;position:fixed;left:10px;right:auto;top:70px;width:32px;height:32px;place-items:center;background:#1b2a34;box-shadow:0 5px 18px #0006}.sidebar.sidebar-collapsed+.content{padding-left:4vw!important}

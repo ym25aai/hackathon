@@ -1,0 +1,1 @@
+.choice-list{display:grid;gap:7px;margin-top:auto;max-height:145px;overflow:auto;padding-right:2px}.choice{display:flex;align-items:flex-start;gap:8px;font-size:11px;line-height:1.3;color:#536259;cursor:pointer}.choice input{accent-color:#69885d;margin:1px 0 0;flex:0 0 auto}.choice span{flex:1}.question-card:has(.choice-list){min-height:320px}

@@ -1,0 +1,1 @@
+"""Sequential stage progression module."""
