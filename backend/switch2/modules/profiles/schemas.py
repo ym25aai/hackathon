@@ -108,3 +108,27 @@ class AIPolishRequest(BaseModel):
 class AIPolishResponse(BaseModel):
     text: str
     model: str
+
+
+class InteractionInviteCreate(BaseModel):
+    recipient_profile_id: int = Field(ge=1)
+    category: str = Field(min_length=1, max_length=40)
+    message: str = Field(default="", max_length=2000)
+
+
+class InteractionInvite(BaseModel):
+    id: int
+    sender_profile_id: int
+    sender_nickname: str
+    recipient_profile_id: int
+    recipient_nickname: str
+    category: str
+    message: str
+    status: str
+    created_at: str
+    responded_at: str | None = None
+
+
+class InteractionInviteResponse(BaseModel):
+    accepted: bool
+    status: str

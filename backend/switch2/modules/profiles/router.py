@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, PinPayload, PreferenceState, PreferenceStateWrite, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, UnlockResponse
-from .service import create_profile, delete_profile, generate_ai_questions, generate_ai_report, generate_sandbox_analysis, get_ai_config, get_preferences, list_profiles, polish_answer, save_ai_config, save_preferences, set_profile_pin, unlock_profile
+from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, InteractionInvite, InteractionInviteCreate, InteractionInviteResponse, PinPayload, PreferenceState, PreferenceStateWrite, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, UnlockResponse
+from .service import create_interaction_invite, create_profile, delete_profile, generate_ai_questions, generate_ai_report, generate_sandbox_analysis, get_ai_config, get_preferences, list_interaction_invites, list_profiles, list_sent_interaction_invites, polish_answer, respond_interaction_invite, save_ai_config, save_preferences, set_profile_pin, unlock_profile
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
 
@@ -53,6 +53,26 @@ def post_profile_ai_report(profile_id: int, payload: AIReportRequest) -> AIRepor
 @router.post("/{profile_id}/sandbox-analysis", response_model=SandboxAnalysisResponse)
 def post_sandbox_analysis(profile_id: int, payload: SandboxAnalysisRequest) -> SandboxAnalysisResponse:
     return generate_sandbox_analysis(profile_id, payload)
+
+
+@router.post("/{profile_id}/interaction-invites", response_model=InteractionInvite, status_code=201)
+def post_interaction_invite(profile_id: int, payload: InteractionInviteCreate) -> InteractionInvite:
+    return create_interaction_invite(profile_id, payload)
+
+
+@router.get("/{profile_id}/interaction-invites", response_model=list[InteractionInvite])
+def get_interaction_invites(profile_id: int) -> list[InteractionInvite]:
+    return list_interaction_invites(profile_id)
+
+
+@router.get("/{profile_id}/interaction-invites/sent", response_model=list[InteractionInvite])
+def get_sent_interaction_invites(profile_id: int) -> list[InteractionInvite]:
+    return list_sent_interaction_invites(profile_id)
+
+
+@router.post("/{profile_id}/interaction-invites/{invite_id}/respond", response_model=InteractionInviteResponse)
+def post_interaction_invite_response(profile_id: int, invite_id: int, payload: InteractionInviteResponse) -> InteractionInviteResponse:
+    return respond_interaction_invite(profile_id, invite_id, payload.accepted)
 
 
 @router.post("/{profile_id}/ai-polish", response_model=AIPolishResponse)

@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from fastapi import HTTPException
 from cryptography.fernet import Fernet, InvalidToken
 
-from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, PinPayload, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, SandboxDecision
+from .schemas import AIPolishRequest, AIPolishResponse, AIConfigRead, AIConfigWrite, AIQuestionsRequest, AIQuestionsResponse, AIReportRequest, AIReportResponse, InteractionInvite, InteractionInviteCreate, InteractionInviteResponse, PinPayload, Profile, ProfileCreate, SandboxAnalysisRequest, SandboxAnalysisResponse, SandboxDecision
 from ...config import settings
 from ...database import connection
 from ...profile_store import initialize_profile_database, profile_connection, profile_database_path, read_preference, write_preference
@@ -397,3 +397,52 @@ def polish_answer(profile_id: int, payload: AIPolishRequest) -> AIPolishResponse
         raise HTTPException(status_code=502, detail=exc.read().decode("utf-8", errors="replace")) from exc
     except (URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+def _interaction_invite(row) -> InteractionInvite:
+    return InteractionInvite(**dict(row))
+
+
+def create_interaction_invite(profile_id: int, payload: InteractionInviteCreate) -> InteractionInvite:
+    if profile_id == payload.recipient_profile_id:
+        raise HTTPException(status_code=400, detail="Choose another profile")
+    with connection() as database:
+        sender = database.execute("SELECT id, nickname FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+        recipient = database.execute("SELECT id, nickname FROM profiles WHERE id = ?", (payload.recipient_profile_id,)).fetchone()
+        if sender is None or recipient is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        database.execute("UPDATE interaction_invites SET status = 'expired', responded_at = CURRENT_TIMESTAMP WHERE sender_profile_id = ? AND recipient_profile_id = ? AND status = 'pending'", (profile_id, payload.recipient_profile_id))
+        cursor = database.execute("INSERT INTO interaction_invites (sender_profile_id, recipient_profile_id, category, message) VALUES (?, ?, ?, ?)", (profile_id, payload.recipient_profile_id, payload.category, payload.message))
+        row = database.execute("SELECT i.id, i.sender_profile_id, s.nickname AS sender_nickname, i.recipient_profile_id, r.nickname AS recipient_nickname, i.category, i.message, i.status, i.created_at, i.responded_at FROM interaction_invites i JOIN profiles s ON s.id = i.sender_profile_id JOIN profiles r ON r.id = i.recipient_profile_id WHERE i.id = ?", (cursor.lastrowid,)).fetchone()
+    return _interaction_invite(row)
+
+
+def _expire_interaction_invites(database) -> None:
+    database.execute("UPDATE interaction_invites SET status = 'expired', responded_at = CURRENT_TIMESTAMP WHERE status = 'pending' AND datetime(created_at) <= datetime('now', '-3 minutes')")
+
+
+def list_interaction_invites(profile_id: int) -> list[InteractionInvite]:
+    with connection() as database:
+        _expire_interaction_invites(database)
+        rows = database.execute("SELECT i.id, i.sender_profile_id, s.nickname AS sender_nickname, i.recipient_profile_id, r.nickname AS recipient_nickname, i.category, i.message, i.status, i.created_at, i.responded_at FROM interaction_invites i JOIN profiles s ON s.id = i.sender_profile_id JOIN profiles r ON r.id = i.recipient_profile_id WHERE i.recipient_profile_id = ? AND i.status = 'pending' ORDER BY i.id DESC", (profile_id,)).fetchall()
+    return [_interaction_invite(row) for row in rows]
+
+
+def list_sent_interaction_invites(profile_id: int) -> list[InteractionInvite]:
+    with connection() as database:
+        _expire_interaction_invites(database)
+        rows = database.execute("SELECT i.id, i.sender_profile_id, s.nickname AS sender_nickname, i.recipient_profile_id, r.nickname AS recipient_nickname, i.category, i.message, i.status, i.created_at, i.responded_at FROM interaction_invites i JOIN profiles s ON s.id = i.sender_profile_id JOIN profiles r ON r.id = i.recipient_profile_id WHERE i.sender_profile_id = ? ORDER BY i.id DESC LIMIT 20", (profile_id,)).fetchall()
+    return [_interaction_invite(row) for row in rows]
+
+
+def respond_interaction_invite(profile_id: int, invite_id: int, accepted: bool) -> InteractionInviteResponse:
+    with connection() as database:
+        _expire_interaction_invites(database)
+        row = database.execute("SELECT recipient_profile_id FROM interaction_invites WHERE id = ? AND status = 'pending'", (invite_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Invitation not found or already answered")
+        if row["recipient_profile_id"] != profile_id:
+            raise HTTPException(status_code=403, detail="Only the invited profile can respond")
+        status = "accepted" if accepted else "declined"
+        database.execute("UPDATE interaction_invites SET status = ?, responded_at = CURRENT_TIMESTAMP WHERE id = ?", (status, invite_id))
+    return InteractionInviteResponse(accepted=accepted, status=status)

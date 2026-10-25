@@ -17,6 +17,20 @@ def initialize_database() -> None:
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS interaction_invites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_profile_id INTEGER NOT NULL,
+                recipient_profile_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                message TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                responded_at TEXT,
+                FOREIGN KEY(sender_profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+                FOREIGN KEY(recipient_profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+            )
+        """)
         columns = {row[1] for row in connection.execute("PRAGMA table_info(profiles)").fetchall()}
         if "pin_salt" not in columns:
             connection.execute("ALTER TABLE profiles ADD COLUMN pin_salt TEXT")
